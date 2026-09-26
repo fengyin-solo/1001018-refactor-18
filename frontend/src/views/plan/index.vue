@@ -32,6 +32,7 @@
         <tr>
           <th v-for="column in columns" :key="column">{{ column }}</th>
           <th>可执行动作</th>
+          <th>详情</th>
         </tr>
       </thead>
       <tbody>
@@ -43,14 +44,19 @@
               :key="action"
               class="link"
               type="button"
+              :disabled="Boolean(startBlockReason(row, action))"
+              :title="startBlockReason(row, action)"
               @click="runAction(action, row)"
             >
               {{ action }}
             </button>
           </td>
+          <td>
+            <RouterLink class="link" :to="`/plan/${row.id}`">查看</RouterLink>
+          </td>
         </tr>
         <tr v-if="!rows.length">
-          <td :colspan="columns.length + 1" class="empty-state">暂无养护计划数据，可先登记养护计划</td>
+          <td :colspan="columns.length + 2" class="empty-state">暂无养护计划数据，可先登记养护计划</td>
         </tr>
       </tbody>
     </table>
@@ -66,16 +72,20 @@
 import { onMounted, ref } from 'vue'
 
 import { request } from '@/api/client'
+import {
+  PLAN_ACTIONS,
+  PLAN_COLUMNS,
+  PLAN_ENDPOINT,
+  type PlanEntry,
+  runPlanAction,
+  startBlockReason,
+} from '@/views/plan/shared'
 
-type Row = Record<string, string | number | null>
+const columns = PLAN_COLUMNS
+const actions = PLAN_ACTIONS
+const stats = [{ label: '待编制计划', value: 0 }, { label: '已审批计划', value: 0 }, { label: '执行中计划', value: 0 }]
 
-const ENDPOINT = '/api/plan'
-const columns = ["计划编号", "计划周期", "计划类型", "覆盖设施", "计划内容", "预算金额", "编制人", "计划状态"]
-const actions = ["编制计划", "审批计划", "启动执行"]
-const statuses = ["待编制", "已编制", "已审批", "执行中"]
-const stats = [{"label": "待编制计划", "value": 0}, {"label": "已审批计划", "value": 0}, {"label": "执行中计划", "value": 0}]
-
-const rows = ref<Row[]>([])
+const rows = ref<PlanEntry[]>([])
 const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
@@ -87,22 +97,25 @@ function resetFilters() {
 }
 
 function exportRows() {
-  window.open(`${ENDPOINT}/export`, '_blank')
+  window.open(`${PLAN_ENDPOINT}/export`, '_blank')
 }
 
 function openCreate() {
   errorMessage.value = '养护计划登记入口尚未接入审批流'
 }
 
-async function runAction(action: string, row: Row) {
+async function runAction(action: string, row: PlanEntry) {
+  const blockedReason = startBlockReason(row, action)
+  if (blockedReason) {
+    errorMessage.value = blockedReason
+    return
+  }
+
   errorMessage.value = ''
   try {
-    const response = await request(`${ENDPOINT}/${row.id}/actions`, {
-      method: 'POST',
-      body: JSON.stringify({ action }),
-    })
-    if (!response.ok) {
-      throw new Error('养护计划动作未生效，请稍后重试')
+    const result = await runPlanAction(row.id, action)
+    if (!result.ok) {
+      throw new Error(result.message)
     }
     await reload()
   } catch (error) {
@@ -114,7 +127,7 @@ async function reload() {
   errorMessage.value = ''
   const query = new URLSearchParams(filters.value as Record<string, string>).toString()
   try {
-    const response = await request(`${ENDPOINT}?${query}`)
+    const response = await request(`${PLAN_ENDPOINT}?${query}`)
     if (!response.ok) {
       throw new Error('养护计划列表读取失败')
     }

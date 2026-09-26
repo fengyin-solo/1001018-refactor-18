@@ -23,10 +23,16 @@ def list_entries(
     page: int = 1,
     size: int = 20,
 ) -> PageResult[dict]:
-    """按计划编号与状态过滤养护计划列表；没有数据时返回空页，不报错。"""
+    """按计划编号与状态过滤养护计划列表；列表同时返回统一的开工条件结论。"""
     if size > 200:
         raise HTTPException(status_code=400, detail="每页最多 200 条，请缩小分页范围")
-    items, total = service.list_entries(keyword=keyword, status=status, page=page, size=size)
+    items, total = service.list_entries(
+        keyword=keyword,
+        status=status,
+        page=page,
+        size=size,
+        include_start_condition=True,
+    )
     return PageResult(items=items, total=total, page=page, size=size)
 
 
