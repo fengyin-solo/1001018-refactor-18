@@ -30,6 +30,12 @@ def list_entries(
     return PageResult(items=items, total=total, page=page, size=size)
 
 
+@router.get("/start-check")
+def check_start_condition(plan_no: str = Query(..., description="计划编号")) -> dict:
+    """开工条件查询：列表按钮、详情页与动作接口共用的唯一结论来源。"""
+    return service.evaluate_start_condition(plan_no)
+
+
 @router.get("/{entry_id}", response_model=dict)
 def get_entry(entry_id: int) -> dict:
     """读取单条养护计划明细；不存在时给出可读的错误说明。"""

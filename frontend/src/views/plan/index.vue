@@ -43,10 +43,13 @@
               :key="action"
               class="link"
               type="button"
+              :disabled="action === START_ACTION && !canStart(row)"
+              :title="action === START_ACTION ? startTip(row) : ''"
               @click="runAction(action, row)"
             >
               {{ action }}
             </button>
+            <RouterLink class="link" :to="`/plan/${row.id}`">详情</RouterLink>
           </td>
         </tr>
         <tr v-if="!rows.length">
@@ -68,8 +71,10 @@ import { onMounted, ref } from 'vue'
 import { request } from '@/api/client'
 
 type Row = Record<string, string | number | null>
+type StartCheck = { ok: boolean; message: string; reasons: string[] }
 
 const ENDPOINT = '/api/plan'
+const START_ACTION = '启动执行'
 const columns = ["计划编号", "计划周期", "计划类型", "覆盖设施", "计划内容", "预算金额", "编制人", "计划状态"]
 const actions = ["编制计划", "审批计划", "启动执行"]
 const statuses = ["待编制", "已编制", "已审批", "执行中"]
@@ -80,6 +85,22 @@ const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+// 开工条件结论全部来自后端同一份实现，前端只展示、不自行判断
+const startChecks = ref<Record<string, StartCheck>>({})
+
+function planNo(row: Row) {
+  return String(row['计划编号'] ?? '')
+}
+
+function canStart(row: Row) {
+  const check = startChecks.value[planNo(row)]
+  return check ? check.ok : true
+}
+
+function startTip(row: Row) {
+  const check = startChecks.value[planNo(row)]
+  return check ? check.message : '开工条件确认中'
+}
 
 function resetFilters() {
   filters.value = {}
@@ -99,10 +120,11 @@ async function runAction(action: string, row: Row) {
   try {
     const response = await request(`${ENDPOINT}/${row.id}/actions`, {
       method: 'POST',
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({ values: { action } }),
     })
-    if (!response.ok) {
-      throw new Error('养护计划动作未生效，请稍后重试')
+    const payload = await response.json()
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.message ?? '养护计划动作未生效，请稍后重试')
     }
     await reload()
   } catch (error) {
@@ -121,9 +143,37 @@ async function reload() {
     const payload = await response.json()
     rows.value = payload.items ?? []
     total.value = payload.total ?? rows.value.length
+    await refreshStartChecks(rows.value)
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '养护计划列表读取失败'
   }
+}
+
+async function refreshStartChecks(items: Row[]) {
+  const results = await Promise.all(
+    items.map(async (row) => {
+      const no = planNo(row)
+      if (!no) {
+        return null
+      }
+      try {
+        const response = await request(`${ENDPOINT}/start-check?plan_no=${encodeURIComponent(no)}`)
+        if (!response.ok) {
+          return null
+        }
+        return [no, (await response.json()) as StartCheck] as const
+      } catch {
+        return null
+      }
+    }),
+  )
+  const map: Record<string, StartCheck> = {}
+  for (const result of results) {
+    if (result) {
+      map[result[0]] = result[1]
+    }
+  }
+  startChecks.value = map
 }
 
 onMounted(reload)

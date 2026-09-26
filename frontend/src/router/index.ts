@@ -19,6 +19,7 @@ const Geom = () => import('@/views/geom/index.vue')
 const Light = () => import('@/views/light/index.vue')
 const Drain = () => import('@/views/drain/index.vue')
 const Plan = () => import('@/views/plan/index.vue')
+const PlanDetail = () => import('@/views/plan/detail.vue')
 const Complaint = () => import('@/views/complaint/index.vue')
 const Load = () => import('@/views/load/index.vue')
 
@@ -44,6 +45,7 @@ const router = createRouter({
     { path: '/light', name: 'light', component: Light },
     { path: '/drain', name: 'drain', component: Drain },
     { path: '/plan', name: 'plan', component: Plan },
+    { path: '/plan/:id', name: 'plan-detail', component: PlanDetail },
     { path: '/complaint', name: 'complaint', component: Complaint },
     { path: '/load', name: 'load', component: Load },
   ],
